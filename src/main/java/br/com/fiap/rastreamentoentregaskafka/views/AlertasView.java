@@ -3,49 +3,49 @@ package br.com.fiap.rastreamentoentregaskafka.views;
 import br.com.fiap.rastreamentoentregaskafka.model.SlaEstourado;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+
+import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
-import java.util.concurrent.ConcurrentLinkedDeque;
+import org.slf4j.Logger;
 
 @Component
 public class AlertasView {
 
-    private static final int LIMITE = 50;
-
-    private final ConcurrentLinkedDeque<SlaEstourado> ultimos = new ConcurrentLinkedDeque<>();
+    private static final int MAX_ALERTAS = 50;
+    private final Deque<SlaEstourado> ultimos = new ArrayDeque<>();
     private final ObjectMapper mapper = new ObjectMapper();
 
-    @KafkaListener(topics = "entregas.sla", groupId = "ui-alertas", autoStartup = "true")
+    @KafkaListener(topics = "entregas.sla", groupId = "ui-alertas") // <- grupo exclusivo da UI
     public void onAlerta(ConsumerRecord<String, String> rec) {
         try {
-            SlaEstourado a = mapper.readValue(rec.value(), SlaEstourado.class);
+            String payload = rec.value();
+            if (payload == null || payload.isBlank()) return;
 
-            // adiciona no topo (mais recente primeiro)
-            ultimos.addFirst(a);
+            SlaEstourado alerta = mapper.readValue(payload, SlaEstourado.class);
 
-            // poda para manter no máximo LIMITE
-            while (ultimos.size() > LIMITE) {
-                ultimos.removeLast();
+            synchronized (ultimos) {
+                ultimos.addFirst(alerta);
+                while (ultimos.size() > MAX_ALERTAS) ultimos.removeLast();
             }
 
-            System.out.printf("[UI] alerta %s | detectado=%d | eta=%d | offset=%d%n",
-                    a.entregaId, a.detectadoEmEpochMs, a.estimativaEntregaEpochMs, rec.offset());
-
+            System.out.printf("[UI] alerta SLA recebido key=%s -> %s%n", rec.key(), payload);
         } catch (Exception e) {
             System.err.println("[UI] falha ao parsear mensagem de entregas.sla: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    /** Retorna cópia imutável para exibição (ordem: recentes → antigos). */
+    /** Usado por /api/alertas */
     public List<SlaEstourado> listar() {
-        return List.copyOf(ultimos);
+        synchronized (ultimos) { return List.copyOf(ultimos); }
     }
 
-    /** Utilitário opcional para testes. */
-    public void clear() { ultimos.clear(); }
+    // opcional para testes
+    public void clear() { synchronized (ultimos) { ultimos.clear(); } }
 }

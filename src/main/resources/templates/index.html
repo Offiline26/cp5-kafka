@@ -4,6 +4,7 @@
     <meta charset="UTF-8"/>
     <title>Rastreamento de Entregas (Kafka)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0"/>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { padding: 24px; }
@@ -85,31 +86,37 @@
         </table>
     </div>
 
-    <div class="col-lg-5">
-        <h4>Alertas de SLA</h4>
-        <ul class="list-group" id="ul-alertas">
-            <!-- render inicial no servidor -->
-            <li class="list-group-item muted" th:if="${#lists.isEmpty(alertas)}">Sem alertas ainda.</li>
-            <li class="list-group-item" th:each="a : ${alertas}">
-                <strong th:text="${a.entregaId}">entrega</strong>
-                <span class="text-danger">SLA estourado</span>
-                <div class="small text-muted">
-                    ETA: <span th:text="${a.estimativaEntregaEpochMs}">eta</span> • Detectado:
-                    <span th:text="${a.detectadoEmEpochMs}">det</span>
-                </div>
-                <div th:text="${a.motivo}">motivo</div>
-            </li>
-        </ul>
+<!--    <div class="col-lg-5">-->
+<!--        <h4>Alertas de SLA</h4>-->
+<!--        <div class="card">-->
+<!--            <div class="card-body p-2">-->
+<!--                <ul class="list-group list-group-flush" id="ul-alertas" role="status" aria-live="polite"></ul>-->
+<!--                <div id="alertas-empty" class="text-muted p-2">Sem alertas ainda.</div>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="mb-3">Teste (forçar alerta de SLA em uma entrega existente)</h5>
+        <div class="input-group">
+            <select id="selForcar" class="form-select" title="Selecione uma entrega existente">
+                <option value="" selected disabled>Carregando IDs de entregas...</option>
+            </select>
+            <button class="btn btn-warning" type="button" onclick="forcarSla()">Forçar SLA (teste)</button>
+        </div>
+        <div class="form-text">A lista mostra apenas entregas já publicadas nesta sessão.</div>
     </div>
 </div>
 
-<div>
-    <button class="btn btn-warning" onclick="fetch('/test/estourar-sla', {method:'POST'})">
-        Forçar SLA de teste
-    </button>
-</div>
-
 <script>
+    // ---------- utils ----------
+    function fmt(ms) {
+        if (ms == null) return '';
+        const n = Number(ms);
+        return isFinite(n) ? new Date(n).toLocaleString('pt-BR') : String(ms);
+    }
     function nowMs(){ return Date.now(); }
     function setETA(delta){ document.getElementById('eta').value = nowMs() + delta; }
     function gerarUUID(){
@@ -127,64 +134,140 @@
         if(!etaStr || Number.isNaN(etaNum)){ alert('ETA inválido — use epoch em ms.'); return false; }
         return true;
     }
-    function fmt(x){
-        if(!x) return '';
-        const n = Number(x);
-        try { return new Date(n).toLocaleString(); } catch { return String(x); }
+
+    // ---------- renderizadores ----------
+    function renderStatus(status) {
+        const tbody = document.querySelector('#t-status tbody');
+        tbody.innerHTML = '';
+
+        if (!status || status.length === 0) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td colspan="4" class="muted">Sem dados ainda.</td>`;
+            tbody.appendChild(tr);
+            return;
+        }
+
+        status.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+        <td>${r.entregaId}</td>
+        <td>${r.status}</td>
+        <td title="${r.estimativaEntregaEpochMs}">${fmt(r.estimativaEntregaEpochMs)}</td>
+        <td title="${r.timestamp}">${fmt(r.timestamp)}</td>`;
+            tbody.appendChild(tr);
+        });
     }
 
-    // Polling leve pra atualizar as tabelas (sem cache)
+    function renderAlertas(alertas) {
+        const ul = document.getElementById('ul-alertas');
+        const empty = document.getElementById('alertas-empty');
+
+        // Se não existe a área no DOM, não faça nada (evita TypeError)
+        if (!ul) {
+            console.warn('Área de alertas (#ul-alertas) não encontrada no DOM.');
+            return;
+        }
+
+        ul.innerHTML = '';
+
+        // Nenhum alerta
+        if (!alertas || alertas.length === 0) {
+            if (empty) empty.style.display = '';  // mostra "Sem alertas ainda."
+            return;
+        }
+
+        // Tem alertas → esconde o placeholder
+        if (empty) empty.style.display = 'none';
+
+        // Render
+        alertas.forEach(a => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item';
+            li.innerHTML = `
+        <div><strong>${a.entregaId}</strong> <span class="badge bg-danger">SLA estourado</span></div>
+        <div class="small text-muted">
+          ETA: <span title="${a.estimativaEntregaEpochMs}">${fmt(a.estimativaEntregaEpochMs)}</span>
+          • Detectado: <span title="${a.detectadoEmEpochMs}">${fmt(a.detectadoEmEpochMs)}</span>
+        </div>
+        ${a.motivo ? `<div class="small">${a.motivo}</div>` : ''}`;
+            ul.appendChild(li);
+        });
+    }
+
+    // ---------- polling principal ----------
     async function refresh(){
         try{
             const [st, al] = await Promise.all([
-                fetch('/api/status',  {cache: 'no-store'}),
-                fetch('/api/alertas', {cache: 'no-store'})
+                fetch('/api/status?t=' + Date.now(),  {cache: 'no-store'}),
+                fetch('/api/alertas?t=' + Date.now(), {cache: 'no-store'})
             ]);
             const status = await st.json();
             const alertas = await al.json();
-
-            // tabela status
-            const tbody = document.querySelector('#t-status tbody');
-            tbody.innerHTML = '';
-            if (!status.length) {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `<td colspan="4" class="muted">Sem dados ainda.</td>`;
-                tbody.appendChild(tr);
-            } else {
-                status.forEach(r=>{
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `<td>${r.entregaId}</td><td>${r.status}</td>
-                          <td title="${r.estimativaEntregaEpochMs}">${fmt(r.estimativaEntregaEpochMs)}</td>
-                          <td title="${r.timestamp}">${fmt(r.timestamp)}</td>`;
-                    tbody.appendChild(tr);
-                });
-            }
-
-            // lista alertas
-            const ul = document.getElementById('ul-alertas');
-            ul.innerHTML = '';
-            if (!alertas.length) {
-                ul.innerHTML = `<li class="list-group-item muted">Sem alertas ainda.</li>`;
-            } else {
-                alertas.forEach(a=>{
-                    const li = document.createElement('li');
-                    li.className='list-group-item';
-                    li.innerHTML = `<strong>${a.entregaId}</strong> <span class="text-danger">SLA estourado</span>
-                          <div class="small text-muted">ETA: <span title="${a.estimativaEntregaEpochMs}">${fmt(a.estimativaEntregaEpochMs)}</span>
-                          • Detectado: <span title="${a.detectadoEmEpochMs}">${fmt(a.detectadoEmEpochMs)}</span></div>
-                          <div>${a.motivo || ''}</div>`;
-                    ul.appendChild(li);
-                });
-            }
+            renderStatus(status);
+            renderAlertas(alertas);
         } catch(e){
             console.warn('Falha no refresh', e);
         }
     }
 
-    // default: agora + 1 min
+    // ---------- select para "Forçar SLA" ----------
+    async function carregarIds() {
+        try {
+            const res = await fetch('/api/entregas/ids?t=' + Date.now(), {cache:'no-store'});
+            const ids = await res.json();
+            const sel = document.getElementById('selForcar');
+
+            // preserva seleção
+            const selecionado = sel.value || '';
+
+            // se nada mudou, não mexe (evita perder seleção)
+            const atuais = Array.from(sel.options).map(o => o.value).filter(Boolean);
+            const mudou = ids.length !== atuais.length || ids.some((id, i) => id !== atuais[i]);
+            if (!mudou) return;
+
+            sel.innerHTML = '';
+            if (!ids.length) {
+                sel.innerHTML = '<option value="" disabled selected>Nenhuma entrega registrada ainda</option>';
+                return;
+            }
+            sel.innerHTML = '<option value="" disabled>Selecione uma entrega…</option>';
+            ids.forEach(id => {
+                const opt = document.createElement('option');
+                opt.value = id; opt.textContent = id;
+                sel.appendChild(opt);
+            });
+            if (selecionado && ids.includes(selecionado)) sel.value = selecionado;
+            else sel.selectedIndex = 0;
+
+        } catch(e) {
+            console.warn('Falha ao carregar IDs', e);
+        }
+    }
+
+    async function forcarSla() {
+        const sel = document.getElementById('selForcar');
+        const id = sel.value;
+        if (!id) { alert('Escolha um ID de entrega.'); return; }
+        const r = await fetch('/test/estourar-sla?entregaId=' + encodeURIComponent(id), { method: 'POST' });
+        const txt = await r.text();
+        if (r.ok) {
+            // alerta publicado → atualiza painel
+            refresh();
+        } else {
+            alert('Falhou:\n' + txt);
+        }
+    }
+
+    // ---------- boot ----------
     setETA(60000);
-    setInterval(refresh, 2000);
     refresh();
+    carregarIds();
+    setInterval(refresh, 2000);
+    setInterval(carregarIds, 2000);
+
+    // expõe a função do botão
+    window.forcarSla = forcarSla;
 </script>
+
 </body>
 </html>

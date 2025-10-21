@@ -6,10 +6,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
@@ -24,25 +21,15 @@ public class EstadoAtualView {
         try {
             RotaAtualizada r = mapper.readValue(rec.value(), RotaAtualizada.class);
             ultimoPorEntrega.put(r.entregaId, r);
-            System.out.printf("[UI] rota %s | status=%s | eta=%d | ts=%d | offset=%d%n",
-                    r.entregaId, r.status, r.estimativaEntregaEpochMs, r.timestamp, rec.offset());
-        } catch (Exception e) {
-            System.err.println("[UI] falha ao parsear mensagem de entregas.rotas: " + e.getMessage());
-            e.printStackTrace();
-        }
+            System.out.printf("[UI] rota %s | status=%s | eta=%d%n", r.entregaId, r.status, r.estimativaEntregaEpochMs);
+        } catch (Exception e) { e.printStackTrace(); }
     }
 
-    /** Lista uma cópia ordenada (mais recentes primeiro) para exibir no dashboard. */
-    public List<RotaAtualizada> listar() {
-        return ultimoPorEntrega
-                .values()
-                .stream()
-                .sorted(Comparator.comparingLong((RotaAtualizada r) -> r.timestamp).reversed())
-                .toList();
-    }
+    public Collection<RotaAtualizada> listar() { return ultimoPorEntrega.values(); }
 
-    /** Utilitário opcional para testes. */
-    public void clear() { ultimoPorEntrega.clear(); }
+    public boolean existe(String id) { return ultimoPorEntrega.containsKey(id); }
+    public RotaAtualizada get(String id) { return ultimoPorEntrega.get(id); }
+    public Set<String> idsAtuais() { return new TreeSet<>(ultimoPorEntrega.keySet()); } // ordenado
 
     public void aplicarLocal(RotaAtualizada r) {
         ultimoPorEntrega.put(r.entregaId, r);
