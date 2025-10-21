@@ -5,9 +5,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.TopicBuilder;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @Configuration
 @EnableKafka
+@EnableScheduling
 public class KafkaTopicsConfig {
     @Bean
     public NewTopic entregasRotas() {

@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.UUID;
 
-@Profile("producer")
 @Component
 public class ProducerRunner implements CommandLineRunner {
     private final KafkaTemplate<String, String> kafka;

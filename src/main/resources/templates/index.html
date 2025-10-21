@@ -103,6 +103,12 @@
     </div>
 </div>
 
+<div>
+    <button class="btn btn-warning" onclick="fetch('/test/estourar-sla', {method:'POST'})">
+        Forçar SLA de teste
+    </button>
+</div>
+
 <script>
     function nowMs(){ return Date.now(); }
     function setETA(delta){ document.getElementById('eta').value = nowMs() + delta; }
