@@ -1,4 +1,4 @@
-package br.com.fiap.rastreamentoentregaskafka.views;
+package br.com.fiap.rastreamentoentregaskafka.gateway;
 
 import br.com.fiap.rastreamentoentregaskafka.model.RotaAtualizada;
 import com.fasterxml.jackson.databind.ObjectMapper;

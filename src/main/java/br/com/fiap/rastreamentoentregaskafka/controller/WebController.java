@@ -1,6 +1,6 @@
 package br.com.fiap.rastreamentoentregaskafka.controller;
 
-import br.com.fiap.rastreamentoentregaskafka.views.KafkaGateway;
+import br.com.fiap.rastreamentoentregaskafka.gateway.KafkaGateway;
 import br.com.fiap.rastreamentoentregaskafka.model.RotaAtualizada;
 import br.com.fiap.rastreamentoentregaskafka.model.SlaEstourado;
 import br.com.fiap.rastreamentoentregaskafka.model.Status;

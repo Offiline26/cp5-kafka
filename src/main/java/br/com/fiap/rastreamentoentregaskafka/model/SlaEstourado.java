@@ -5,9 +5,8 @@ public class SlaEstourado {
     public long estimativaEntregaEpochMs;
     public long detectadoEmEpochMs;
     public String motivo;
-    public SlaEstourado() {}
-    public SlaEstourado(String id, long eta, long det, String motivo) {
-        this.entregaId=id; this.estimativaEntregaEpochMs=eta; this.detectadoEmEpochMs=det; this.motivo=motivo;
+    public SlaEstourado(String entregaId, long eta, long det, String motivo) {
+        this.entregaId=entregaId; this.estimativaEntregaEpochMs=eta; this.detectadoEmEpochMs=det; this.motivo=motivo;
     }
 
     public String getEntregaId() {
